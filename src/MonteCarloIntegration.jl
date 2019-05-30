@@ -1,5 +1,5 @@
 module MonteCarloIntegration
 
-greet() = print("Hello World!")
+include("vegas.jl")
 
 end # module
