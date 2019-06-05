@@ -7,38 +7,37 @@ Monte Carlo integration with adaptive sampling
 """
 function vegas(func; 
                ndim = 2, 
-               maxiter = 5, 
-               N = 2, 
-               M = 2, 
+               maxiter = 10, 
+               N = 128, 
+               M = 1000,
+               Minc = 500,
                K = 1000.,
                α = 1.5, 
                rtol = 1e-4)
 
-    Random.seed!(0)
+    # Random.seed!(0)
 
     # Start out with uniform grid
     grid = fill(1/N, N, ndim)
     cgrid = cumsum(grid, dims = 1)
 
-    # Sample `M` points from this uniform grid
-    pts, bpts = generate_pts(grid, cgrid, M)
-
     # Initialize all cumulative variables 
     # for integral and sd estimation 
-    summation = 0.
-    summation2 = 0.
-    σ²tot = 0.
     nevals = 0
     Itot = 0.
     sd = 0.
-    chi = 0.
     integrals = Float64[]
-    sigmas = Float64[]
+    sigma_squares = Float64[]
+    iter = 1
 
-    for i = 1:maxiter
+    while iter <= maxiter
 
-        display(grid)
-        display(bpts)
+        println("---- iter = $iter ---- ")
+
+
+        # Sample `M` points from this grid
+        pts, bpts = generate_pts(grid, cgrid, M)
+        
 
         # Estimate integral
         S, S², fevals = evaluate_at_samples(func, 
@@ -49,13 +48,11 @@ function vegas(func;
                                             grid
                                            )
 
-        σ² = (S² - S^2) * (1 / (M - 1)) |> abs
-        σ²tot += 1/σ²
-        summation += S^2/σ²
-        summation2 += S^3/σ²
+
+        σ² = (S² - S^2) / (M - 1) + eps() # When σ² = 0
         nevals += M
         push!(integrals, S)
-        push!(sigmas, σ²)
+        push!(sigma_squares, σ²)
 
         # Estimate sub-increments distribution
         m = calculate_m_dist(fevals, 
@@ -69,25 +66,34 @@ function vegas(func;
         # Update grid to reflect sub-inc dist
         update_grid!(grid, cgrid, N, M, m)
 
-        # Update variables
+        # Update grid and generate new points
         cumsum!(cgrid, grid, dims=1)
-        pts, bpts = generate_pts(grid, cgrid, M)
 
         oldItot = Itot
         
-        Itot = summation2 / summation
-        sd = Itot * (summation)^(-0.5)
+        # Calculate integral and s.d upto this point
+        Itot = sum((integrals.^3) ./ sigma_squares) / 
+                sum((integrals.^2) ./ sigma_squares)
+
+
+        sd = Itot * sum((integrals.^2) ./ sigma_squares)^(-0.5)
+
+        @show Itot, sd
 
         if abs((oldItot - Itot) / oldItot) < rtol 
             @show (oldItot - Itot) / Itot 
             break
         end
 
+        iter += 1
+        # M += Minc
+
     end
-    χ = sum(((integrals .- Itot).^2) ./ sigmas)
+    χ² = sum(((integrals .- Itot).^2) ./ sigma_squares)
+    @show (integrals .- Itot).^2
     @show nevals
 
-    Itot, sd, χ/(M-1)
+    Itot, sd, χ²/(iter-1)
 end
 
 function evaluate_at_samples(f, pts, bpts, M, N, grid)
@@ -111,17 +117,13 @@ function evaluate_at_samples(f, pts, bpts, M, N, grid)
         # Extract point
         p = vec(pts[i,:])
 
-        #= Calculate area
-        area = 1.
-        for d = 1:dim
-            area *= grid[bpts[i,d], d]
-        end
-        prob = 1 / (N^dim * area)=#
-
         # Get probability of that particular point
-        prob = 0.
+        prob = 1.
+        #for d = 1:dim
+        #    prob *= (probs[bpts[i,d],d]) * N 
+        #end
         for d = 1:dim
-            prob *= probs[bpts[i,d],d]
+            prob *= (1/(N*grid[bpts[i,d],d]))
         end
 
         # Eval function
@@ -129,16 +131,16 @@ function evaluate_at_samples(f, pts, bpts, M, N, grid)
         fevals[i] = fp
 
         S += (fp / prob)
-        S² += (fp / prob) ^ 2
+        S² += (fp / prob)^2
 
     end
 
-    S, S², fevals
+    S/M, S²/M, fevals
 end
 
 
 """
-    pts, bpts = generate_pts(grid, cumgrid, M)
+pts, bpts = generate_pts(grid, cumgrid, M)
 
 Generate `M` points from `grid` which probabilities 
 inversely proportional to grid spacings 
@@ -155,64 +157,23 @@ function generate_pts(grid, cgrid, M)
 
     for d = 1:dim
 
-        # Take a slice of the grid 
-        # corresponding the
-        g = grid[:,d]
-        prob = (1 ./ g) ./ sum(1 ./ g)
-
-        # Create a multinomial distribution to 
-        # pick which bins to sample from 
-        mult = Multinomial(M, prob)
-        samples = rand(mult)
-
         # Remember which bins they come from 
-        bpts[:,d] = reduce(vcat, 
-                           map(
-                               (x,y) -> repeat([x], y),
-                               1:N, 
-                               samples
-                              ))
+        b = rand(1:N, M)
 
-        # Sample from corresponding bins
+        bpts[:,d] .= b
+
         idx = 1
-        for (i,s) in enumerate(samples)
-            if i == 1
-                samp = rand(
-                            Uniform(0, cgrid[1,d]),
-                            s
-                           )
+        for (i,bin) in enumerate(b)
+            if bin == 1
+                pts[i,d] = rand(Uniform(0, cgrid[1,d]))
             else
-                samp = rand(
-                            Uniform(cgrid[i-1,d],
-                                    cgrid[i,d]
-                                  ),
-                            s
-                           )
+                pts[i,d] = rand(Uniform(cgrid[bin-1,d], cgrid[bin,d]))
             end
-            isempty(samp) && continue
-            pts[idx:idx+s-1, d] .= samp
-            idx += s
         end
-        @assert idx == M + 1
     end
 
    pts, bpts
 end
-
-#=function calculate_m_dist(fevals, bpts, grid, K, α, dim)
-    N = size(grid, 1)
-    m = zeros(N, dim)
-    for d = 1:dim
-        for i = 1:size(bpts, 1)
-            m[bpts[i,d],d] += (abs(fevals[i])*grid[bpts[i,d],d])
-        end
-        m[:,d] .+= 10eps()
-        m[:,d] .= m[:,d] ./ sum(m[:,d])
-        #m[:,d] .= K .* ((m[:,d] .- 1) .* (1 ./ log.(m[:,d]))) .^ α
-        m[:,d] .= K .* m[:, d]
-    end
-    ceil.(m)
-end=#
 
 function calculate_m_dist(fevals, bpts, grid, K, α, dim)
  
@@ -224,22 +185,28 @@ function calculate_m_dist(fevals, bpts, grid, K, α, dim)
         probs[:,d] .= (1 ./ grid[:,d]) ./ sum(1 ./ grid[:,d])
     end
     probs .+= eps()
+    @show sum(probs, dims = 1)
     
     for d = 1:dim 
         for i = 1:M
-            m[bpts[i,d], d] += (fevals[i]^2 / 
-                                (prod(probs[bpts[i,d],:]) / probs[bpts[i,d],d])
-                               ) *
-                                grid[bpts[i,d],d]
+            f̄ = sqrt(fevals[i]^2 / 
+                                (
+                                 (prod(probs[bpts[i,d],:]) / 
+                                 probs[bpts[i,d],d]
+                                ) 
+                                )
+                    )
+            m[bpts[i,d], d] += f̄ * grid[bpts[i,d],d]
         end
+        m[:,d] .+= 1 
         m[:,d] .= m[:,d] ./ sum(m[:,d])
-        # m[:,d] .= K .* ((m[:,d] .- 1) .* (1 ./ log.(m[:,d]))) .^ α
+        #m[:,d] .= K .* ((m[:,d] .- 1) .* (1 ./ log.(m[:,d]))) .^ α
         m[:,d] .= K .* m[:, d]
+        #m[:,d] .+= 1 # Avoid this being zero 
     end
     
     round.(m)
 end
-
 
 function update_grid!(grid, cgrid, N, M, m)
     dim = size(m, 2)
@@ -303,6 +270,10 @@ function extract_from_bins!(m, optm, grid, i, morig, res)
         dist += sum(m)*res[end]
     end
 
-
     dist
 end
+
+# Unit tests
+# - f(x) = 1
+# - f(x) = sum(x)
+# - f(x) = sum(sin.(x))
