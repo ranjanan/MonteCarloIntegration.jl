@@ -5,20 +5,29 @@ using Distributions
 
 Monte Carlo integration with adaptive sampling
 """
-function vegas(func; 
-               ndim = 2, 
-               maxiter = 10, 
-               N = 128, 
-               M = 1000,
+function vegas(func, 
+               a = [0.,0.], 
+               b = [0.,0.];
+               maxiter = 100, 
+               N = 100, 
+               M = 10000,
                Minc = 500,
                K = 1000.,
                α = 1.5, 
                rtol = 1e-4)
 
+    @assert length(a) == length(b)
+
+    ndim = length(a)
+
     # Random.seed!(0)
 
     # Start out with uniform grid
-    grid = fill(1/N, N, ndim)
+    # grid = fill(1/N, N, ndim)
+    grid = zeros(N, ndim)
+    for d = 1:ndim
+        grid[:,d] .= fill((b[d] - a[d])/N, N)
+    end
     cgrid = cumsum(grid, dims = 1)
 
     # Initialize all cumulative variables 
@@ -32,11 +41,9 @@ function vegas(func;
 
     while iter <= maxiter
 
-        println("---- iter = $iter ---- ")
-
 
         # Sample `M` points from this grid
-        pts, bpts = generate_pts(grid, cgrid, M)
+        pts, bpts = generate_pts(grid, cgrid, M, a, b)
         
 
         # Estimate integral
@@ -62,6 +69,10 @@ function vegas(func;
                              α, 
                              ndim
                             )
+        #println("m:")
+        #display(m)
+        #println("grid before:")
+        #display(grid)
 
         # Update grid to reflect sub-inc dist
         update_grid!(grid, cgrid, N, M, m)
@@ -78,10 +89,13 @@ function vegas(func;
 
         sd = Itot * sum((integrals.^2) ./ sigma_squares)^(-0.5)
 
-        @show Itot, sd
+        #println("grid after: ")
+        #display(grid)
+
 
         if abs((oldItot - Itot) / oldItot) < rtol 
             @show (oldItot - Itot) / Itot 
+            println("Converged in $iter iterations with $nevals evaluations")
             break
         end
 
@@ -90,7 +104,6 @@ function vegas(func;
 
     end
     χ² = sum(((integrals .- Itot).^2) ./ sigma_squares)
-    @show (integrals .- Itot).^2
     @show nevals
 
     Itot, sd, χ²/(iter-1)
@@ -110,9 +123,9 @@ function evaluate_at_samples(f, pts, bpts, M, N, grid)
         probs[:,d] = (1 ./ grid[:,d]) ./ sum(1 ./ grid[:,d])
     end
     probs .+= eps()
-    display(probs)
 
     for i = 1:M
+
         
         # Extract point
         p = vec(pts[i,:])
@@ -145,7 +158,7 @@ pts, bpts = generate_pts(grid, cumgrid, M)
 Generate `M` points from `grid` which probabilities 
 inversely proportional to grid spacings 
 """
-function generate_pts(grid, cgrid, M)
+function generate_pts(grid, cgrid, M, a, b)
 
     # Get bins and dimension
     dim = size(cgrid, 2)
@@ -165,9 +178,9 @@ function generate_pts(grid, cgrid, M)
         idx = 1
         for (i,bin) in enumerate(b)
             if bin == 1
-                pts[i,d] = rand(Uniform(0, cgrid[1,d]))
+                pts[i,d] = a[d] + rand(Uniform(0, cgrid[1,d]))
             else
-                pts[i,d] = rand(Uniform(cgrid[bin-1,d], cgrid[bin,d]))
+                pts[i,d] = a[d] + rand(Uniform(cgrid[bin-1,d], cgrid[bin,d]))
             end
         end
     end
@@ -185,7 +198,6 @@ function calculate_m_dist(fevals, bpts, grid, K, α, dim)
         probs[:,d] .= (1 ./ grid[:,d]) ./ sum(1 ./ grid[:,d])
     end
     probs .+= eps()
-    @show sum(probs, dims = 1)
     
     for d = 1:dim 
         for i = 1:M
@@ -198,11 +210,9 @@ function calculate_m_dist(fevals, bpts, grid, K, α, dim)
                     )
             m[bpts[i,d], d] += f̄ * grid[bpts[i,d],d]
         end
-        m[:,d] .+= 1 
         m[:,d] .= m[:,d] ./ sum(m[:,d])
-        #m[:,d] .= K .* ((m[:,d] .- 1) .* (1 ./ log.(m[:,d]))) .^ α
+        # m[:,d] .= K .* ((m[:,d] .- 1) .* (1 ./ log.(m[:,d]))) .^ α
         m[:,d] .= K .* m[:, d]
-        #m[:,d] .+= 1 # Avoid this being zero 
     end
     
     round.(m)
@@ -240,7 +250,7 @@ function extract_from_bins!(m, optm, grid, i, morig, res)
         (m[k] == 0) && continue
 
         # If bin has what's required, take everything
-        if required < m[k]
+        if required <= m[k]
             #res = grid[k] / morig[k]
             dist += (res[k] * required)
             m[k] -= required
@@ -251,7 +261,7 @@ function extract_from_bins!(m, optm, grid, i, morig, res)
         required = optm - collected
 
         # If more is required, take the entire bin
-        if required > m[k]
+        if required >= m[k]
             #res = grid[k] / morig[k]
             dist += (res[k] * m[k])
             collected += m[k]
