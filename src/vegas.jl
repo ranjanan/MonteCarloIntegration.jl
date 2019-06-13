@@ -1,20 +1,44 @@
 using Random
 using Distributions
 """
-    vegas(f, kwargs...)
+    vegas(f, st, en, kwargs...)
 
-Monte Carlo integration with adaptive sampling
+VEGAS is a Monte Carlo algorithm for 
+multidimensional integration based on 
+adaptive importance sampling. It divides
+each dimension into bins and adaptively adjusts
+bin widths so the points sampled from the
+region where the function has highest magnitude
+
+Arguments:
+----------
+- st: Array of starting values in each dimension. 
+Defaults to zeros(2)
+- end: Array of ending values in each dimension. 
+Defaults to ones(2)
+
+Kwargs:
+------
+- nbins: Number of bins in each dimension. 
+Defaults to 100. 
+- ncalls: Number of function calls per iteration. 
+Defaults to 10000.
+- maxiter - Maximum number of iterations. 
+Defaults to 100.
 """
 function vegas(func, 
                a = [0.,0.], 
-               b = [0.,0.];
+               b = [1.,1.];
                maxiter = 100, 
-               N = 100, 
-               M = 10000,
+               nbins = 100, 
+               ncalls = 10000,
                Minc = 500,
                K = 1000.,
                α = 1.5, 
                rtol = 1e-4)
+
+    N = nbins
+    M = ncalls
 
     @assert length(a) == length(b)
 
