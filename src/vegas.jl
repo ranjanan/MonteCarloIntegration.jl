@@ -30,7 +30,7 @@ function vegas(func,
                a = [0.,0.], 
                b = [1.,1.];
                maxiter = 100, 
-               nbins = 10, 
+               nbins = 100, 
                ncalls = 1000,
                Minc = 500,
                K = 1000.,
@@ -93,10 +93,11 @@ function vegas(func,
                              α, 
                              ndim
                             )
-        #println("m:")
-        #display(m)
-        #println("grid before:")
-        #display(grid)
+        #=println("m:")
+        display(m)
+        println("grid before:")
+        display(grid)
+        @show sum(grid, dims=1)=#
 
         # Update grid to reflect sub-inc dist
         update_grid!(grid, cgrid, N, M, m)
@@ -113,8 +114,9 @@ function vegas(func,
 
         sd = Itot * sum((integrals.^2) ./ sigma_squares)^(-0.5)
 
-        #println("grid after: ")
-        #display(grid)
+        #=println("grid after: ")
+        display(grid)
+        @show sum(grid, dims=1)=#
 
 
         if abs((oldItot - Itot) / oldItot) < rtol 
@@ -204,6 +206,12 @@ function generate_pts(grid, cgrid, M, a, b)
             if bin == 1
                 pts[i,d] = a[d] + rand(Uniform(0, cgrid[1,d]))
             else
+                st = cgrid[bin-1,d]
+                en = cgrid[bin,d]
+                if st == en
+                @show st, en
+                    continue
+                end
                 pts[i,d] = a[d] + rand(Uniform(cgrid[bin-1,d], cgrid[bin,d]))
             end
         end
@@ -237,23 +245,126 @@ function calculate_m_dist(fevals, bpts, grid, K, α, dim)
         m[:,d] .= m[:,d] ./ sum(m[:,d])
         # m[:,d] .= K .* ((m[:,d] .- 1) .* (1 ./ log.(m[:,d]))) .^ α
         m[:,d] .= K .* m[:, d]
+        m[:,d] .+= 1 # Ensure m ≠ 0
     end
     
     round.(m)
 end
 
 function update_grid!(grid, cgrid, N, M, m)
+
+    dims = size(grid, 2)
+
+    for d = 1:dims
+        gridcol = grid[:,d]
+        mdim = m[:,d]
+
+        # Count zeros in m 
+        z = iszero.(mdim)
+        c = sum(z)
+        pos = findall(z)
+
+        res = zeros(size(grid, 1))  
+        for i = 1:N
+            mdim[i] == 0 && continue
+            res[i] = gridcol[i] / mdim[i]
+        end
+
+        # Calculate optm as sum / # non-zero m's
+        optm = sum(mdim)/(N - c)
+
+        for i = 1:N
+
+            # If there are no m's, grid[i] = 0 
+            if res[i] == 0 
+                gridcol[i] = 0 
+                continue
+            end
+
+            dist  = extract_from_bins!(mdim, optm, grid, res)
+            gridcol[i] = dist
+
+        end
+        grid[:,d] .= gridcol
+    end    
+    
+    grid
+end
+
+function extract_from_bins!(m, optm, grid, res)
+
+    N = size(m, 1)
+    dist = 0.
+    collected = 0
+    for k = 1:N
+
+        # First, calculate how many required
+        required = optm - collected
+
+        (m[k] == 0) && continue
+
+        # If bin has what's required, take everything
+        if required <= m[k]
+            #res = grid[k] / morig[k]
+            dist += (res[k] * required)
+            m[k] -= required
+            collected += required
+        end
+
+        # Update requirements
+        required = optm - collected
+
+        # If more is required, take the entire bin
+        if required >= m[k]
+            #res = grid[k] / morig[k]
+            dist += (res[k] * m[k])
+            collected += m[k]
+            m[k] = 0
+        end
+
+        # If collected everything, exit
+        if collected >= optm
+            break
+        end
+    end
+
+    dist 
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#=function update_grid!(grid, cgrid, N, M, m)
     dim = size(m, 2)
     for d = 1:dim
         morig = m[:,d]
         mcopy = copy(morig)
-        optm = div(sum(morig), N)
+        z = iszero.(m)
+        pos = findall(z)
+        @show z, pos
+        deduct = sum(z)
+        optm = div(sum(morig), N - deduct)
         gridcol = grid[:,d]
         res = gridcol ./ morig
         
         for i = 1:N
+            if i in pos
+                dist = 0 
+                gridcol[i] = dist
+                continue
+            end
             dist = extract_from_bins!(mcopy, optm, gridcol, i, morig, res)
-            dist == 0 && (dist += 10eps())
+            # dist == 0 && (dist += 10eps())
             gridcol[i] = dist
         end
 
@@ -305,7 +416,7 @@ function extract_from_bins!(m, optm, grid, i, morig, res)
     end
 
     dist
-end
+end=#
 
 # Unit tests
 # - f(x) = 1
