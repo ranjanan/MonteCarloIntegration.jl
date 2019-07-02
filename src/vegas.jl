@@ -33,9 +33,10 @@ function vegas(func,
                nbins = 100, 
                ncalls = 1000,
                Minc = 500,
-               K = 1000.,
+               K = 1.,
                α = 1.5, 
-               rtol = 1e-4)
+               rtol = 1e-4, 
+               debug = false)
 
     N = nbins
     M = ncalls
@@ -108,6 +109,10 @@ function vegas(func,
 
 
         sd = Itot * sum((integrals.^2) ./ sigma_squares)^(-0.5)
+        
+        if debug
+            iter % 100 == 0 && println("Iteration $iter, abs(sd/Itot) = $(abs(sd/Itot))")
+        end
 
         if abs(sd/Itot) < rtol 
             println("Converged in $nevals evaluations")
