@@ -93,11 +93,6 @@ function vegas(func,
                              α, 
                              ndim
                             )
-        #=println("m:")
-        display(m)
-        println("grid before:")
-        display(grid)
-        @show sum(grid, dims=1)=#
 
         # Update grid to reflect sub-inc dist
         update_grid!(grid, cgrid, N, M, m)
@@ -114,14 +109,8 @@ function vegas(func,
 
         sd = Itot * sum((integrals.^2) ./ sigma_squares)^(-0.5)
 
-        #=println("grid after: ")
-        display(grid)
-        @show sum(grid, dims=1)=#
-
-
-        if abs((oldItot - Itot) / oldItot) < rtol 
-            @show (oldItot - Itot) / Itot 
-            println("Converged in $iter iterations with $nevals evaluations")
+        if abs(sd/Itot) < rtol 
+            println("Converged in $nevals evaluations")
             break
         end
 
@@ -158,9 +147,6 @@ function evaluate_at_samples(f, pts, bpts, M, N, grid)
 
         # Get probability of that particular point
         prob = 1.
-        #for d = 1:dim
-        #    prob *= (probs[bpts[i,d],d]) * N 
-        #end
         for d = 1:dim
             prob *= (1/(N*grid[bpts[i,d],d]))
         end
@@ -209,7 +195,6 @@ function generate_pts(grid, cgrid, M, a, b)
                 st = cgrid[bin-1,d]
                 en = cgrid[bin,d]
                 if st == en
-                @show st, en
                     continue
                 end
                 pts[i,d] = a[d] + rand(Uniform(cgrid[bin-1,d], cgrid[bin,d]))
@@ -243,7 +228,6 @@ function calculate_m_dist(fevals, bpts, grid, K, α, dim)
             m[bpts[i,d], d] += f̄ * grid[bpts[i,d],d]
         end
         m[:,d] .= m[:,d] ./ sum(m[:,d])
-        # m[:,d] .= K .* ((m[:,d] .- 1) .* (1 ./ log.(m[:,d]))) .^ α
         m[:,d] .= K .* m[:, d]
         m[:,d] .+= 1 # Ensure m ≠ 0
     end
@@ -330,95 +314,3 @@ function extract_from_bins!(m, optm, grid, res)
 
     dist 
 end
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#=function update_grid!(grid, cgrid, N, M, m)
-    dim = size(m, 2)
-    for d = 1:dim
-        morig = m[:,d]
-        mcopy = copy(morig)
-        z = iszero.(m)
-        pos = findall(z)
-        @show z, pos
-        deduct = sum(z)
-        optm = div(sum(morig), N - deduct)
-        gridcol = grid[:,d]
-        res = gridcol ./ morig
-        
-        for i = 1:N
-            if i in pos
-                dist = 0 
-                gridcol[i] = dist
-                continue
-            end
-            dist = extract_from_bins!(mcopy, optm, gridcol, i, morig, res)
-            # dist == 0 && (dist += 10eps())
-            gridcol[i] = dist
-        end
-
-        grid[:,d] .= gridcol
-    end
-    grid
-end
-
-function extract_from_bins!(m, optm, grid, i, morig, res)
-    N = size(m, 1)
-    dist = 0.
-    collected = 0
-    for k = 1:N
-
-        # First, calculate how many required
-        required = optm - collected
-
-        (m[k] == 0) && continue
-
-        # If bin has what's required, take everything
-        if required <= m[k]
-            #res = grid[k] / morig[k]
-            dist += (res[k] * required)
-            m[k] -= required
-            collected += required
-        end
-
-        # Update requirements
-        required = optm - collected
-
-        # If more is required, take the entire bin
-        if required >= m[k]
-            #res = grid[k] / morig[k]
-            dist += (res[k] * m[k])
-            collected += m[k]
-            m[k] = 0
-        end
-
-        # If collected everything, exit
-        if collected >= optm
-            break
-        end
-
-    end
-
-    # Take remaining?
-    if i==N && sum(m) != 0
-        dist += sum(m)*res[end]
-    end
-
-    dist
-end=#
-
-# Unit tests
-# - f(x) = 1
-# - f(x) = sum(x)
-# - f(x) = sum(sin.(x))
