@@ -1,8 +1,15 @@
 name = "MonteCarloIntegration"
 uuid = "4886b29c-78c9-11e9-0a6e-41e1f4161f7b"
-authors = ["Your Name <benditlikeranjan@gmail.com>"]
+authors = ["Ranjan Anantharaman <ranjan.anantharaman@gmail.com>"]
 version = "0.1.0"
 
 [deps]
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+HCubature = "19dc6840-f33b-545b-b366-655c7e3ffd49"
+
+[targets]
+test = ["HCubature", "Test"]

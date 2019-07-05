@@ -98,7 +98,8 @@ function vegas(func,
                                             bpts,
                                             M,
                                             N, 
-                                            grid
+                                            grid, 
+                                            batch
                                            )
 
 
@@ -149,7 +150,7 @@ function vegas(func,
     Itot, sd, χ²/(iter-1)
 end
 
-function evaluate_at_samples(f, pts, bpts, M, N, grid)
+function evaluate_at_samples(f, pts, bpts, M, N, grid, batch)
 
     S = 0.
     S² = 0.
