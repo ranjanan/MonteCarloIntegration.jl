@@ -1,6 +1,7 @@
 # Monte Carlo Integration 
 
 [![Build Status](https://travis-ci.org/ranjanan/MonteCarloIntegration.jl.svg?branch=master)](https://travis-ci.org/ranjanan/MonteCarloIntegration.jl)
+[![Coverage Status](https://coveralls.io/repos/github/ranjanan/MonteCarloIntegration.jl/badge.svg?branch=master)](https://coveralls.io/github/ranjanan/MonteCarloIntegration.jl?branch=master)
 
 This package provides multidimensional integration 
 algorithms based on monte carlo methods. The biggest
