@@ -8,7 +8,7 @@ multidimensional integration based on
 adaptive importance sampling. It divides
 each dimension into bins and adaptively adjusts
 bin widths so the points sampled from the
-region where the function has highest magnitude
+region where the function has highest magnitude. 
 
 Arguments:
 ----------
@@ -22,9 +22,34 @@ Kwargs:
 - nbins: Number of bins in each dimension. 
 Defaults to 100. 
 - ncalls: Number of function calls per iteration. 
-Defaults to 10000.
-- maxiter - Maximum number of iterations. 
+Defaults to 1000.
+- maxiter: Maximum number of iterations. 
 Defaults to 100.
+- rtol: Relative tolerance required. 
+Defaults to 1e-4.
+- atol: Absolute tolerance required. 
+Defaults to 1e-2.
+- debug: Prints `abs(sd/I)` every 100 iterations. 
+Defaults to false.
+- batch: Whether `f` returns batches of function
+evaluations. `f` is assumed to take one argument 
+`pts`, an `ncalls × `ndims` matrix. Each row
+is a unique point and returns an `ncalls` length
+vector of function evals. This argument defaults
+to false. 
+
+Output:
+------
+- Estimate for the integral 
+- Standard deviation
+- χ^2 / (numiter - 1): should be less than 1 
+otherwise integral estimate should not be trusted. 
+
+References:
+-----------
+- Lepage, G. Peter. "A new algorithm for adaptive 
+multidimensional integration." Journal of 
+Computational Physics 27.2 (1978): 192-203.
 """
 function vegas(func, 
                a = [0.,0.], 
@@ -32,11 +57,10 @@ function vegas(func,
                maxiter = 100, 
                nbins = 100, 
                ncalls = 1000,
-               Minc = 500,
-               K = 1.,
-               α = 1.5, 
                rtol = 1e-4, 
-               debug = false)
+               atol = 1e-4,
+               debug = false, 
+               batch = false)
 
     N = nbins
     M = ncalls
@@ -45,10 +69,7 @@ function vegas(func,
 
     ndim = length(a)
 
-    # Random.seed!(0)
-
     # Start out with uniform grid
-    # grid = fill(1/N, N, ndim)
     grid = zeros(N, ndim)
     for d = 1:ndim
         grid[:,d] .= fill((b[d] - a[d])/N, N)
@@ -90,8 +111,6 @@ function vegas(func,
         m = calculate_m_dist(fevals, 
                              bpts, 
                              grid, 
-                             K, 
-                             α, 
                              ndim
                             )
 
@@ -114,7 +133,7 @@ function vegas(func,
             iter % 100 == 0 && println("Iteration $iter, abs(sd/Itot) = $(abs(sd/Itot))")
         end
 
-        if abs(sd/Itot) < rtol 
+        if abs(sd/Itot) < rtol && abs(sd) < atol
             println("Converged in $nevals evaluations")
             break
         end
@@ -126,6 +145,7 @@ function vegas(func,
     χ² = sum(((integrals .- Itot).^2) ./ sigma_squares)
     @show nevals
 
+
     Itot, sd, χ²/(iter-1)
 end
 
@@ -135,30 +155,32 @@ function evaluate_at_samples(f, pts, bpts, M, N, grid)
     S² = 0.
     fevals = zeros(M)
     dim = size(pts, 2)
-    probs = zeros(size(grid)...)
 
-    # Calculate probabilities corresponding
-    # to each point in the grid
-    for d = 1:dim
-        probs[:,d] = (1 ./ grid[:,d]) ./ sum(1 ./ grid[:,d])
+    # Get all fevals in one shot
+    if batch
+        fevals = f(pts)
+        @assert length(fevals) == M 
     end
-    probs .+= eps()
 
     for i = 1:M
 
-        
-        # Extract point
-        p = vec(pts[i,:])
+        if !batch
+
+            # Extract point
+            p = vec(pts[i,:])
+
+            # Eval function
+            fp = f(p)
+            fevals[i] = fp
+        else
+            fp = fevals[i]
+        end
 
         # Get probability of that particular point
         prob = 1.
         for d = 1:dim
             prob *= (1/(N*grid[bpts[i,d],d]))
         end
-
-        # Eval function
-        fp = f(p)
-        fevals[i] = fp
 
         S += (fp / prob)
         S² += (fp / prob)^2
@@ -210,7 +232,8 @@ function generate_pts(grid, cgrid, M, a, b)
    pts, bpts
 end
 
-function calculate_m_dist(fevals, bpts, grid, K, α, dim)
+function calculate_m_dist(fevals, bpts, grid, dim)
+
  
     M = size(bpts, 1) 
     N = size(grid, 1)
@@ -219,7 +242,6 @@ function calculate_m_dist(fevals, bpts, grid, K, α, dim)
     for d = 1:dim
         probs[:,d] .= (1 ./ grid[:,d]) ./ sum(1 ./ grid[:,d])
     end
-    probs .+= eps()
     
     for d = 1:dim 
         for i = 1:M
@@ -232,12 +254,11 @@ function calculate_m_dist(fevals, bpts, grid, K, α, dim)
                     )
             m[bpts[i,d], d] += f̄ * grid[bpts[i,d],d]
         end
+        m[:,d] .+= sum(m[:,d])
         m[:,d] .= m[:,d] ./ sum(m[:,d])
-        m[:,d] .= K .* m[:, d]
-        m[:,d] .+= 1 # Ensure m ≠ 0
     end
     
-    round.(m)
+    m
 end
 
 function update_grid!(grid, cgrid, N, M, m)
