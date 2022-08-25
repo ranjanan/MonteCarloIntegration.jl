@@ -1,5 +1,15 @@
 using Random
 using Distributions
+
+struct VEGASResult{T1,T2,T3,T4,T5,T6}
+	grid::T1
+	cumulative_grid::T2
+    integral_estimate::T3
+	standard_deviation::T4
+	frac::T5
+	sigma_squares::T6
+end
+
 """
     vegas(f, st, en, kwargs...)
 
@@ -144,10 +154,8 @@ function vegas(func,
 
     end
     χ² = sum(((integrals .- Itot).^2) ./ sigma_squares)
-    @show nevals
 
-
-    Itot, sd, χ²/(iter-1)
+	VEGASResult(grid, cgrid, Itot, sd, χ²/(iter-1), sigma_squares)
 end
 
 function evaluate_at_samples(f, pts, bpts, M, N, grid, batch)
@@ -341,3 +349,4 @@ function extract_from_bins!(m, optm, grid, res)
 
     dist 
 end
+
