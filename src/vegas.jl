@@ -70,9 +70,9 @@ function vegas(func,
     ndim = length(a)
 
     # Start out with uniform grid
-    grid = zeros(N, ndim)
+    grid = zeros(nbins, ndim)
     for d = 1:ndim
-        grid[:,d] .= fill((b[d] - a[d])/N, N)
+        grid[:,d] .= fill((b[d] - a[d])/nbins, nbins)
     end
     cgrid = cumsum(grid, dims = 1)
 
@@ -89,22 +89,22 @@ function vegas(func,
 
 
         # Sample `M` points from this grid
-        pts, bpts = generate_pts(grid, cgrid, M, a, b)
+        pts, bpts = generate_pts(grid, cgrid, ncalls, a, b)
         
 
         # Estimate integral
         S, S², fevals = evaluate_at_samples(func, 
                                             pts, 
                                             bpts,
-                                            M,
-                                            N, 
+                                            ncalls,
+                                            nbins, 
                                             grid, 
                                             batch
                                            )
 
 
-        σ² = (S² - S^2) / (M - 1) + eps() # When σ² = 0
-        nevals += M
+        σ² = (S² - S^2) / (ncalls - 1) + eps() # When σ² = 0
+        nevals += ncalls
         push!(integrals, S)
         push!(sigma_squares, σ²)
 
@@ -116,7 +116,7 @@ function vegas(func,
                             )
 
         # Update grid to reflect sub-inc dist
-        update_grid!(grid, cgrid, N, M, m)
+        update_grid!(grid, cgrid, nbins, ncalls, m)
 
         # Update grid and generate new points
         cumsum!(cgrid, grid, dims=1)
@@ -150,20 +150,20 @@ function vegas(func,
     Itot, sd, χ²/(iter-1)
 end
 
-function evaluate_at_samples(f, pts, bpts, M, N, grid, batch)
+function evaluate_at_samples(f, pts, bpts, ncalls, nbins, grid, batch)
 
     S = 0.
     S² = 0.
-    fevals = zeros(M)
+    fevals = zeros(ncalls)
     dim = size(pts, 2)
 
     # Get all fevals in one shot
     if batch
         fevals = f(pts)
-        @assert length(fevals) == M 
+        @assert length(fevals) == ncalls 
     end
 
-    for i = 1:M
+    for i = 1:ncalls
 
         if !batch
 
@@ -180,7 +180,7 @@ function evaluate_at_samples(f, pts, bpts, M, N, grid, batch)
         # Get probability of that particular point
         prob = 1.
         for d = 1:dim
-            prob *= (1/(N*grid[bpts[i,d],d]))
+            prob *= (1/(nbins*grid[bpts[i,d],d]))
         end
 
         S += (fp / prob)
@@ -188,7 +188,7 @@ function evaluate_at_samples(f, pts, bpts, M, N, grid, batch)
 
     end
 
-    S/M, S²/M, fevals
+    S/ncalls, S²/ncalls, fevals
 end
 
 
@@ -198,20 +198,20 @@ pts, bpts = generate_pts(grid, cumgrid, M)
 Generate `M` points from `grid` which probabilities 
 inversely proportional to grid spacings 
 """
-function generate_pts(grid, cgrid, M, a, b)
+function generate_pts(grid, cgrid, ncalls, a, b)
 
     # Get bins and dimension
     dim = size(cgrid, 2)
-    N = size(cgrid, 1)
+    nbins = size(cgrid, 1)
 
-    # Each dimension needs M points
-    pts = zeros(M, dim)
-    bpts = zeros(Int, M, dim)
+    # Each dimension needs ncalls points
+    pts = zeros(ncalls, dim)
+    bpts = zeros(Int, ncalls, dim)
 
     for d = 1:dim
 
         # Remember which bins they come from 
-        b = rand(1:N, M)
+        b = rand(1:nbins, ncalls)
 
         bpts[:,d] .= b
 
@@ -236,16 +236,16 @@ end
 function calculate_m_dist(fevals, bpts, grid, dim)
 
  
-    M = size(bpts, 1) 
-    N = size(grid, 1)
-    m = zeros(N, dim)
+    ncalls = size(bpts, 1) 
+    nbins = size(grid, 1)
+    m = zeros(nbins, dim)
     probs = zeros(size(grid)...)
     for d = 1:dim
         probs[:,d] .= (1 ./ grid[:,d]) ./ sum(1 ./ grid[:,d])
     end
     
     for d = 1:dim 
-        for i = 1:M
+        for i = 1:ncalls
             f̄ = sqrt(fevals[i]^2 / 
                                 (
                                  (prod(probs[bpts[i,d],:]) / 
@@ -262,7 +262,7 @@ function calculate_m_dist(fevals, bpts, grid, dim)
     m
 end
 
-function update_grid!(grid, cgrid, N, M, m)
+function update_grid!(grid, cgrid, nbins, ncalls, m)
 
     dims = size(grid, 2)
 
@@ -276,15 +276,15 @@ function update_grid!(grid, cgrid, N, M, m)
         pos = findall(z)
 
         res = zeros(size(grid, 1))  
-        for i = 1:N
+        for i = 1:nbins
             mdim[i] == 0 && continue
             res[i] = gridcol[i] / mdim[i]
         end
 
         # Calculate optm as sum / # non-zero m's
-        optm = sum(mdim)/(N - c)
+        optm = sum(mdim)/(nbins - c)
 
-        for i = 1:N
+        for i = 1:nbins
 
             # If there are no m's, grid[i] = 0 
             if res[i] == 0 
@@ -304,10 +304,10 @@ end
 
 function extract_from_bins!(m, optm, grid, res)
 
-    N = size(m, 1)
+    nbins = size(m, 1)
     dist = 0.
     collected = 0
-    for k = 1:N
+    for k = 1:nbins
 
         # First, calculate how many required
         required = optm - collected
