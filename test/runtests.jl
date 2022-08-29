@@ -56,3 +56,15 @@ v = vegas(f, zeros(3), fill(3.0, 3), nbins = 1000, ncalls = 10000).integral_esti
     end
 end
 
+function ackley(x)
+    a, b, c = 20.0, -0.2, 2.0*π
+    len_recip = inv(length(x))
+    sum_sqrs = zero(eltype(x))
+    sum_cos = sum_sqrs
+    for i in x
+        sum_cos += cos(c*i)
+        sum_sqrs += i^2
+    end
+    return (-a * exp(b * sqrt(len_recip*sum_sqrs)) -
+         exp(len_recip*sum_cos) + a + 2.71)
+end

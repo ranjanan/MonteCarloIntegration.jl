@@ -1,5 +1,6 @@
 using Random
 using Distributions
+using Plots
 
 struct VEGASResult{T1,T2,T3,T4,T5,T6}
 	grid::T1
@@ -30,11 +31,11 @@ Defaults to ones(2)
 Kwargs:
 ------
 - nbins: Number of bins in each dimension. 
-Defaults to 100. 
+Defaults to 1000. 
 - ncalls: Number of function calls per iteration. 
-Defaults to 1000.
+Defaults to 10000.
 - maxiter: Maximum number of iterations. 
-Defaults to 100.
+Defaults to 10.
 - rtol: Relative tolerance required. 
 Defaults to 1e-4.
 - atol: Absolute tolerance required. 
@@ -64,9 +65,9 @@ Computational Physics 27.2 (1978): 192-203.
 function vegas(func, 
                a = [0.,0.], 
                b = [1.,1.];
-               maxiter = 100, 
-               nbins = 100, 
-               ncalls = 1000,
+               maxiter = 10, 
+               nbins = 1000, 
+               ncalls = 10000,
                rtol = 1e-4, 
                atol = 1e-4,
                debug = false, 
@@ -350,3 +351,12 @@ function extract_from_bins!(m, optm, grid, res)
     dist 
 end
 
+function plot_grid(res::VEGASResult)
+	g = res.cumulative_grid
+	ndim = size(g,2)
+	ndim != 2 && throw(ErrorException("Can only print 2D grids."))
+	p = plot(xlim = (g[1,1], g[end,1]), ylim = (g[1,2], g[end,2]))
+	vline!(g[:,1], c = 1)
+	hline!(g[:,2], c = 1)
+	p
+end
