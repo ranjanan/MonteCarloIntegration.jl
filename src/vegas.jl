@@ -52,27 +52,24 @@ multidimensional integration." Journal of
 Computational Physics 27.2 (1978): 192-203.
 """
 function vegas(func, 
-               a = [0.,0.], 
-               b = [1.,1.];
+               lb = [0.,0.], 
+               ub = [1.,1.];
                maxiter = 100, 
-               nbins = 100, 
+               nbins = 1000, # from paper
                ncalls = 1000,
                rtol = 1e-4, 
                atol = 1e-4,
                debug = false, 
                batch = false)
 
-    N = nbins
-    M = ncalls
+    @assert length(lb) == length(ub)
 
-    @assert length(a) == length(b)
-
-    ndim = length(a)
+    ndim = length(lb)
 
     # Start out with uniform grid
     grid = zeros(nbins, ndim)
     for d = 1:ndim
-        grid[:,d] .= fill((b[d] - a[d])/nbins, nbins)
+        grid[:,d] .= fill((ub[d] - lb[d])/nbins, nbins)
     end
     cgrid = cumsum(grid, dims = 1)
 
@@ -89,11 +86,11 @@ function vegas(func,
 
 
         # Sample `M` points from this grid
-        pts, bpts = generate_pts(grid, cgrid, ncalls, a, b)
+        pts, bpts = generate_pts(grid, cgrid, ncalls, lb, ub)
         
 
-        # Estimate integral
-        S, S², fevals = evaluate_at_samples(func, 
+        # Estimate integral. Note: S stands for J*f, S2 is J^2f^2
+		I_mc, avg_S2, fevals = evaluate_at_samples(func, 
                                             pts, 
                                             bpts,
                                             ncalls,
@@ -103,11 +100,15 @@ function vegas(func,
                                            )
 
 
-        σ² = (S² - S^2) / (ncalls - 1) + eps() # When σ² = 0
+        σ² = (avg_S2 - I_mc^2) / (ncalls - 1) + eps() # When σ² = 0
         nevals += ncalls
-        push!(integrals, S)
+        push!(integrals, I_mc)
         push!(sigma_squares, σ²)
 
+		# Now the algorithm tries to make average J^2f^2 the same in every interval
+		# Do this for every dimension
+		d = calculate_d(fevals, bpts, grid)
+	
         # Estimate sub-increments distribution
         m = calculate_m_dist(fevals, 
                              bpts, 
@@ -154,29 +155,19 @@ function evaluate_at_samples(f, pts, bpts, ncalls, nbins, grid, batch)
 
     S = 0.
     S² = 0.
-    fevals = zeros(ncalls)
     dim = size(pts, 2)
 
     # Get all fevals in one shot
     if batch
         fevals = f(pts)
         @assert length(fevals) == ncalls 
-    end
+	else
+		fevals = map(f, eachrow(p))
+	end
 
-    for i = 1:ncalls
+    @inbounds for i = 1:ncalls
 
-        if !batch
-
-            # Extract point
-            p = vec(pts[i,:])
-
-            # Eval function
-            fp = f(p)
-            fevals[i] = fp
-        else
-            fp = fevals[i]
-        end
-
+		fp = fevals[i]
         # Get probability of that particular point
         prob = 1.
         for d = 1:dim
@@ -198,7 +189,7 @@ pts, bpts = generate_pts(grid, cumgrid, M)
 Generate `M` points from `grid` which probabilities 
 inversely proportional to grid spacings 
 """
-function generate_pts(grid, cgrid, ncalls, a, b)
+function generate_pts(grid, cgrid, ncalls, lb, ub)
 
     # Get bins and dimension
     dim = size(cgrid, 2)
@@ -218,14 +209,14 @@ function generate_pts(grid, cgrid, ncalls, a, b)
         idx = 1
         for (i,bin) in enumerate(b)
             if bin == 1
-                pts[i,d] = a[d] + rand(Uniform(0, cgrid[1,d]))
+                pts[i,d] = lb[d] + rand(Uniform(0, cgrid[1,d]))
             else
                 st = cgrid[bin-1,d]
                 en = cgrid[bin,d]
                 if st == en
                     continue
                 end
-                pts[i,d] = a[d] + rand(Uniform(cgrid[bin-1,d], cgrid[bin,d]))
+                pts[i,d] = lb[d] + rand(Uniform(cgrid[bin-1,d], cgrid[bin,d]))
             end
         end
     end
@@ -233,6 +224,44 @@ function generate_pts(grid, cgrid, ncalls, a, b)
    pts, bpts
 end
 
+"""
+Calculate d matrix.
+"""
+function calculate_d(fevals, bpts, grid)
+
+    ncalls = size(bpts, 1) 
+	nbins, ndim = size(grid)
+    d = zeros(nbins, ndim)
+    probs = zeros(size(grid)...)
+	interval_length = map(sum, eachcol(grid))
+
+	# Start with uniform probability everywhere
+	# and then weight by length of grid
+	probmap = fill(1/nbins, nbins, ndims)
+	for i = 1:ndims
+		interval = interval_length[i]
+		for j = 1:nbins
+			probmap[j,i] /= (grid[j,i] / interval)
+		end
+	end
+    
+	f2 = fevals .^ 2
+    for i = 1:dim 
+		for c = 1:ncalls
+			bin_i = bpts[c,i]
+			d[bin_i,i] += f2 ./ (probmap[bin_i, i])^2
+		end
+    end
+    
+	# Regularize and smooth
+	for i = 1:ndim
+	end
+
+end
+
+"""
+Calculate
+"""
 function calculate_m_dist(fevals, bpts, grid, dim)
 
  
