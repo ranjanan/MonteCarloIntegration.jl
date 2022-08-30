@@ -132,7 +132,7 @@ function vegas(func,
         sd = Itot * sum((integrals.^2) ./ sigma_squares)^(-0.5)
         
         if debug
-            iter % 100 == 0 && println("Iteration $iter, abs(sd/Itot) = $(abs(sd/Itot))")
+            println("Iteration $iter, abs(sd/Itot) = $(abs(sd/Itot))")
         end
 
         if abs(sd/Itot) < rtol && abs(sd) < atol
@@ -254,12 +254,45 @@ function calculate_d(fevals, bpts, grid)
     end
     
 	# Regularize and smooth
+	dreg = copy(d)
 	for i = 1:ndim
+		sumd = sum(d[:,i])
+		dreg[1,i] = (7d[1] + d[2])/8 
+		for j = 2:nbins-1
+			dreg[j,i] = (d[j-1] + 6d[j] + d[j+1]) / 8
+		end
+		dreg[end,i] = (d[end-1,i]+ 7d[end]) / 8
+		dreg ./= sumd
 	end
-
+	
+	dreg = mapreduce(x -> ((1.-x)/log.(1./x)).^0.5,hcat, eachcol(dreg))
 end
 
-"""
+function update_grid(grid, cgrid, d)
+
+	nbins, ndims = size(d)
+	newcgrid = copy(cgrid)
+	for dim = 1:ndims
+		i = 0
+		j = 0
+		Sd = 0.
+		delta_d = sum(d[:,dim]) / ncalls_per_bin
+
+		while i < nbins
+			while Sd < delta_d
+				Sd += d[j+1]
+				j+=1
+			end
+			Sd -= delta_d
+			newcgrid[i+1] = cgrid[i+1] - ((Sd * grid[i+1])/d[j])
+		end
+	end
+	newgrid = diff(newcgrid)
+	newgrid, newcgrid
+end
+
+
+#="""
 Calculate
 """
 function calculate_m_dist(fevals, bpts, grid, dim)
@@ -329,7 +362,7 @@ function update_grid!(grid, cgrid, nbins, ncalls, m)
     end    
     
     grid
-end
+end=#
 
 function extract_from_bins!(m, optm, grid, res)
 
