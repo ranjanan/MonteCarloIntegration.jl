@@ -109,15 +109,9 @@ function vegas(func,
 		# Do this for every dimension
 		d = calculate_d(fevals, bpts, grid)
 	
-        # Estimate sub-increments distribution
-        m = calculate_m_dist(fevals, 
-                             bpts, 
-                             grid, 
-                             ndim
-                            )
 
         # Update grid to reflect sub-inc dist
-        update_grid!(grid, cgrid, nbins, ncalls, m)
+        grid, cgrid = update_grid(grid, cgrid, d)
 
         # Update grid and generate new points
         cumsum!(cgrid, grid, dims=1)
@@ -162,7 +156,7 @@ function evaluate_at_samples(f, pts, bpts, ncalls, nbins, grid, batch)
         fevals = f(pts)
         @assert length(fevals) == ncalls 
 	else
-		fevals = map(f, eachrow(p))
+		fevals = map(f, eachrow(pts))
 	end
 
     @inbounds for i = 1:ncalls
@@ -230,8 +224,8 @@ Calculate d matrix.
 function calculate_d(fevals, bpts, grid)
 
     ncalls = size(bpts, 1) 
-	nbins, ndim = size(grid)
-    d = zeros(nbins, ndim)
+	nbins, ndims = size(grid)
+    d = zeros(nbins, ndims)
     probs = zeros(size(grid)...)
 	interval_length = map(sum, eachcol(grid))
 
@@ -246,16 +240,16 @@ function calculate_d(fevals, bpts, grid)
 	end
     
 	f2 = fevals .^ 2
-    for i = 1:dim 
+    for dim = 1:ndims 
 		for c = 1:ncalls
-			bin_i = bpts[c,i]
-			d[bin_i,i] += f2 ./ (probmap[bin_i, i])^2
+			bin_dim = bpts[c,dim]
+			d[bin_dim,dim] += f2[c] ./ (probmap[bin_dim, dim])^2
 		end
     end
     
 	# Regularize and smooth
 	dreg = copy(d)
-	for i = 1:ndim
+	for i = 1:ndims
 		sumd = sum(d[:,i])
 		dreg[1,i] = (7d[1] + d[2])/8 
 		for j = 2:nbins-1
@@ -265,7 +259,7 @@ function calculate_d(fevals, bpts, grid)
 		dreg ./= sumd
 	end
 	
-	dreg = mapreduce(x -> ((1.-x)/log.(1./x)).^0.5,hcat, eachcol(dreg))
+	dreg = mapreduce(x -> ((1 .- x)/log.(1 ./ x)).^0.5,hcat, eachcol(dreg))
 end
 
 function update_grid(grid, cgrid, d)
@@ -274,17 +268,18 @@ function update_grid(grid, cgrid, d)
 	newcgrid = copy(cgrid)
 	for dim = 1:ndims
 		i = 0
-		j = 0
 		Sd = 0.
-		delta_d = sum(d[:,dim]) / ncalls_per_bin
+		delta_d = sum(d[:,dim]) / nbins
 
-		while i < nbins
+		while i+1 < nbins
+			j = 0
 			while Sd < delta_d
-				Sd += d[j+1]
+				Sd += d[j+1, dim]
 				j+=1
 			end
 			Sd -= delta_d
-			newcgrid[i+1] = cgrid[i+1] - ((Sd * grid[i+1])/d[j])
+			newcgrid[i+1,dim] = cgrid[i+1,dim] - ((Sd * grid[i+1,dim])/d[j+1,dim])
+			i+=1
 		end
 	end
 	newgrid = diff(newcgrid)
