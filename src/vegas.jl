@@ -20,11 +20,11 @@ Defaults to ones(2)
 Kwargs:
 ------
 - nbins: Number of bins in each dimension. 
-Defaults to 100. 
+Defaults to 1000. 
 - ncalls: Number of function calls per iteration. 
-Defaults to 1000.
+Defaults to 10000.
 - maxiter: Maximum number of iterations. 
-Defaults to 100.
+Defaults to 10.
 - rtol: Relative tolerance required. 
 Defaults to 1e-4.
 - atol: Absolute tolerance required. 
@@ -54,9 +54,9 @@ Computational Physics 27.2 (1978): 192-203.
 function vegas(func, 
                lb = [0.,0.], 
                ub = [1.,1.];
-               maxiter = 100, 
+               maxiter = 10, 
                nbins = 1000, # from paper
-               ncalls = 1000,
+               ncalls = 10000,
                rtol = 1e-4, 
                atol = 1e-4,
                debug = false, 
@@ -109,7 +109,6 @@ function vegas(func,
 		# Do this for every dimension
 		d = calculate_d(fevals, bpts, grid)
 	
-
         # Update grid to reflect sub-inc dist
         grid, cgrid = update_grid(grid, cgrid, d)
 
@@ -139,7 +138,6 @@ function vegas(func,
 
     end
     χ² = sum(((integrals .- Itot).^2) ./ sigma_squares)
-    @show nevals
 
 
     Itot, sd, χ²/(iter-1)
@@ -259,7 +257,8 @@ function calculate_d(fevals, bpts, grid)
 		dreg ./= sumd
 	end
 	
-	dreg = mapreduce(x -> ((1 .- x)/log.(1 ./ x)).^0.5,hcat, eachcol(dreg))
+	# dreg = mapreduce(x -> ((1 .- x)/log.(1 ./ x)).^0.5,hcat, eachcol(dreg))
+	dreg
 end
 
 function update_grid(grid, cgrid, d)
@@ -267,22 +266,26 @@ function update_grid(grid, cgrid, d)
 	nbins, ndims = size(d)
 	newcgrid = copy(cgrid)
 	for dim = 1:ndims
-		i = 0
-		Sd = 0.
+		i = 1
 		delta_d = sum(d[:,dim]) / nbins
-
-		while i+1 < nbins
-			j = 0
+		i+=1
+		while i < nbins
+			Sd = 0.
+			j = 1
 			while Sd < delta_d
-				Sd += d[j+1, dim]
+				Sd += d[j, dim]
 				j+=1
 			end
 			Sd -= delta_d
-			newcgrid[i+1,dim] = cgrid[i+1,dim] - ((Sd * grid[i+1,dim])/d[j+1,dim])
+			newcgrid[i,dim] = cgrid[i,dim] - ((Sd * grid[i,dim])/d[j-1,dim])
 			i+=1
 		end
 	end
-	newgrid = diff(newcgrid)
+	newgrid = copy(grid)
+	newgrid[1,:] = newcgrid[1,:]
+	for i = 2:nbins
+		newgrid[i,:] .= newcgrid[i,:] .- newcgrid[i-1,:]
+	end
 	newgrid, newcgrid
 end
 
