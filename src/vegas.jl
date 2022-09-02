@@ -2,6 +2,14 @@ using Random
 using Distributions
 using QuasiMonteCarlo
 
+abstract type MonteCarloIntegrationResult end
+
+struct VEGASResult{T1,T2,T3,T4}
+	integral_estimate::T1
+	standard_deviation::T2
+	chi_squared_average::T3
+	adaptive_map::T4
+end
 """
     vegas(f, st, en, kwargs...)
 
@@ -42,16 +50,21 @@ to false.
 
 Output:
 ------
+A VEGASResult object with the following fields:
 - Estimate for the integral 
 - Standard deviation
 - χ^2 / (numiter - 1): should be less than 1 
 otherwise integral estimate should not be trusted. 
+- final adapted map
 
 References:
 -----------
 - Lepage, G. Peter. "A new algorithm for adaptive 
 multidimensional integration." Journal of 
 Computational Physics 27.2 (1978): 192-203.
+- Lepage, G. Peter. "Adaptive multidimensional 
+integration: VEGAS enhanced." Journal of 
+Computational Physics 439 (2021): 110386.
 """
 function vegas(func, 
                lb = [0.,0.], 
@@ -62,7 +75,8 @@ function vegas(func,
                rtol = 1e-4, 
                atol = 1e-4,
                debug = false, 
-               batch = false)
+               batch = false,
+			   alpha = 1.5)
 
     @assert length(lb) == length(ub)
 
@@ -77,7 +91,6 @@ function vegas(func,
 	for dim = 1:ndim
 		delx[:,dim] .= ((ub[dim] - lb[dim]) / nbins)
 	end
-
 	
     # Initialize all cumulative variables 
     # for integral and sd estimation 
@@ -92,7 +105,7 @@ function vegas(func,
 
         # Sample `ncalls` points from this grid
 		# Uniform sampling in `y` space
-		ymat = QuasiMonteCarlo.sample(ncalls, lb, ub, QuasiMonteCarlo.UniformSample())	
+		ymat = QuasiMonteCarlo.sample(ncalls, zeros(ndim), ones(ndim), QuasiMonteCarlo.UniformSample())	
 
 		from_y_to_i(y) = floor(Int,nbins*y) + 1
 		delta(y) = y*nbins + 1 - from_y_to_i(y)
@@ -120,21 +133,19 @@ function vegas(func,
 		Jsf = Js .* fevals
 
 		integral_mc = sum(Jsf) / ncalls
-		variance_mc = (sum(Jsf.^2)/ncalls - integral_mc^2) / (ncalls - 1)
+		variance_mc = (sum(Jsf.^2)/ncalls - integral_mc^2) / (ncalls - 1) + eps()
 
         nevals += ncalls
         push!(integrals, integral_mc)
         push!(sigma_squares, variance_mc)
 
-		# Now the algorithm tries to make average J^2f^2 the same in every interval
-		# Do this for every dimension
-		d = calculate_d(Jsf, imat, nbins)
+		# Now the algorithm tries to make average J^2f^2 
+		# the same in every interval. Do this for every dimension
+		d = calculate_d(Jsf, imat, nbins, alpha)
 	
-        # Update grid to reflect sub-inc dist
+        # Update grid to make d equal in all intervals
         x, delx = update_grid(x, delx, d)
 
-        oldItot = Itot
-        
         # Calculate integral and s.d upto this point
 		Itot = sum(integrals ./ sigma_squares) / sum(1 ./ sigma_squares)
 		sd = 1/sqrt(sum(1 ./ sigma_squares))
@@ -149,19 +160,21 @@ function vegas(func,
         end
 
         iter += 1
-        # M += Minc
 
     end
     chi_squared = sum(((integrals .- Itot).^2) ./ sigma_squares)
     
-    Itot, sd, chi_squared/(iter-1)
+	VEGASResult(Itot, sd, chi_squared/(iter-1), x)
 end
 
 
 """
-Calculate d matrix.
+	calculate_d(Jsf, imat, nbins) -> d
+
+Calculate d matrix given J*f product and
+locations of the sampled points.
 """
-function calculate_d(Jsf, imat, nbins)
+function calculate_d(Jsf, imat, nbins, alpha = 1.5)
 
 	ndim = size(imat,1)
 	d = zeros(nbins, ndim)
@@ -186,12 +199,20 @@ function calculate_d(Jsf, imat, nbins)
 	end
 
 	for dim = 1:ndim
-		dreg[:,dim] .= ((1 .- dreg[:,dim]) ./ log.(1 ./ dreg[:,dim])).^1.5
+		dreg[:,dim] .= ((1 .- dreg[:,dim]) ./ log.(1 ./ dreg[:,dim])).^alpha
 	end
 	
 	dreg
 end
 
+"""
+	update_grid(x, delx, d) -> newx, newdelx
+
+Function used to update the adaptive grid
+given values of the d matrix. The intervals
+are adjusted so that the `d` values are equal
+in each interval.
+"""
 function update_grid(x, delx, d)
 
 	nbins, ndims = size(d)
