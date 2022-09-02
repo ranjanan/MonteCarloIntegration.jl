@@ -29,12 +29,17 @@ end
 
         for dim = 1:5
             @info("Dimension = $dim")
-            v, _ = vegas(f, zeros(dim), ones(dim))
+            v = vegas(f, zeros(dim), ones(dim)).integral_estimate
             h, _ = hcubature(f, zeros(dim), ones(dim))
             @test isapprox(v, h, rtol = 1e-2)
         end
     end
 end
+
+# Test from HCubature.jl
+f(x) = sin(x[1] + 3*sin(2*x[2] + 4*sin(3*x[3]))) 
+v = vegas(f, zeros(3), fill(3.0, 3), nbins = 1000, ncalls = 10000).integral_estimate
+@test v ≈ -4.78802790509727 rtol=1e-2
 
 @testset "Batched Integrands" begin
 
@@ -44,25 +49,10 @@ end
 
         for dim = 1:5
             @info("Dimension = $dim")
-            v, _ = vegas(f2, zeros(dim), ones(dim), batch = true)
+            v = vegas(f2, zeros(dim), ones(dim), batch = true).integral_estimate
             h, _ = hcubature(f, zeros(dim), ones(dim))
             @test isapprox(v, h, rtol = 1e-2)
         end
     end
 end
-              
 
-#=@testset "Simple Monte Carlo Tests" begin
-    for dim = 2:2
-        @test isapprox(vegas(x -> 1, zeros(dim), ones(dim), nbins = 1)[1], 1., rtol = 1e-2)
-        @test isapprox(vegas(x -> sum(x),zeros(dim), ones(dim), nbins = 1)[1], 1., rtol = 1e-2)
-        @test isapprox(vegas(x -> sum(sin.(x)),zeros(dim), ones(dim), nbins = 1)[1], 0.919, rtol = 1e-2)
-    end
-end
-@testset "Standard Integrands" begin
-    for dim = 2:2
-        @test isapprox(vegas(x -> 1, zeros(dim), ones(dim))[1], 1., rtol = 1e-2)
-        @test isapprox(vegas(x -> sum(x), zeros(dim), ones(dim))[1], 1., rtol = 1e-2)
-        @test isapprox(vegas(x -> sum(sin.(x)), zeros(dim), ones(dim))[1], 0.919, rtol = 1e-2)
-    end
-end=#

@@ -1,6 +1,7 @@
 using Random
 using Distributions
 using QuasiMonteCarlo
+
 """
     vegas(f, st, en, kwargs...)
 
@@ -152,8 +153,7 @@ function vegas(func,
 
     end
     chi_squared = sum(((integrals .- Itot).^2) ./ sigma_squares)
-
-
+    
     Itot, sd, chi_squared/(iter-1)
 end
 
@@ -221,3 +221,4 @@ function update_grid(x, delx, d)
 	end
 	newx, newdelx
 end
+
