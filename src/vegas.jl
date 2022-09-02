@@ -96,13 +96,12 @@ function vegas(func,
 		from_y_to_i(y) = floor(Int,nbins*y) + 1
 		delta(y) = y*nbins + 1 - from_y_to_i(y)
 		from_y_to_x(y,dim) = x[from_y_to_i(y),dim] + delx[from_y_to_i(y),dim]*delta(y)
-		J(y,dim) = nbins*delx[from_y_to_i(y)]
+		J(y,dim) = nbins*delx[from_y_to_i(y),dim]
 
 		xmat = similar(ymat)
 		for dim = 1:ndim
 			xmat[dim,:] .= map(y -> from_y_to_x(y, dim), ymat[dim,:])
 		end
-		display(xmat)
 		Js = zeros(eltype(ymat), size(ymat, 2))
 		for i = 1:size(ymat,2)
 			Js[i] = prod(J(ymat[dim, i],dim) for dim = 1:ndim)
@@ -120,7 +119,7 @@ function vegas(func,
 		Jsf = Js .* fevals
 
 		integral_mc = sum(Jsf) / ncalls
-		variance_mc = (sum(Jsf.^2) / ncalls - integral_mc^2) / (ncalls - 1)
+		variance_mc = (sum(Jsf.^2)/ncalls - integral_mc^2) / (ncalls - 1)
 
         nevals += ncalls
         push!(integrals, integral_mc)
@@ -136,11 +135,8 @@ function vegas(func,
         oldItot = Itot
         
         # Calculate integral and s.d upto this point
-        Itot = sum((integrals.^3) ./ sigma_squares) / 
-                sum((integrals.^2) ./ sigma_squares)
-
-
-        sd = Itot * sum((integrals.^2) ./ sigma_squares)^(-0.5)
+		Itot = sum(integrals ./ sigma_squares) / sum(1 ./ sigma_squares)
+		sd = 1/sqrt(sum(1 ./ sigma_squares))
         
         if debug
             println("Iteration $iter, abs(sd/Itot) = $(abs(sd/Itot))")
@@ -155,11 +151,10 @@ function vegas(func,
         # M += Minc
 
     end
-    χ² = sum(((integrals .- Itot).^2) ./ sigma_squares)
+    chi_squared = sum(((integrals .- Itot).^2) ./ sigma_squares)
 
 
-    #Itot, sd, χ²/(iter-1)
-	x, delx
+    Itot, sd, chi_squared/(iter-1)
 end
 
 
