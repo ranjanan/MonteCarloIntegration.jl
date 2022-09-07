@@ -4,11 +4,12 @@ using QuasiMonteCarlo
 
 abstract type MonteCarloIntegrationResult end
 
-struct VEGASResult{T1,T2,T3,T4}
+struct VEGASResult{T1,T2,T3,T4,T5}
 	integral_estimate::T1
 	standard_deviation::T2
 	chi_squared_average::T3
-	adaptive_map::T4
+	adaptive_grid::T4
+	grid_spacing::T5
 end
 """
     vegas(f, st, en, kwargs...)
@@ -164,7 +165,7 @@ function vegas(func,
     end
     chi_squared = sum(((integrals .- Itot).^2) ./ sigma_squares)
     
-	VEGASResult(Itot, sd, chi_squared/(iter-1), x)
+	VEGASResult(Itot, sd, chi_squared/(iter-1), x, delx)
 end
 
 
@@ -243,3 +244,31 @@ function update_grid(x, delx, d)
 	newx, newdelx
 end
 
+"""
+	sample_from_adaptive_grid(res, ncalls)
+
+Sample using a finetuned adaptive grid.  
+"""
+function sample_from_adaptive_grid(res, ncalls)
+
+	x = res.adaptive_grid
+	delx = res.grid_spacing
+
+	nbins = size(x, 1)
+	ndim = size(x, 2)
+
+	# Sample `ncalls` points from this grid
+	# Uniform sampling in `y` space
+	ymat = QuasiMonteCarlo.sample(ncalls, zeros(ndim), ones(ndim), QuasiMonteCarlo.UniformSample())	
+
+	from_y_to_i(y) = floor(Int,nbins*y) + 1
+	delta(y) = y*nbins + 1 - from_y_to_i(y)
+	from_y_to_x(y,dim) = x[from_y_to_i(y),dim] + delx[from_y_to_i(y),dim]*delta(y)
+	J(y,dim) = nbins*delx[from_y_to_i(y),dim]
+
+	xmat = similar(ymat)
+	for dim = 1:ndim
+		xmat[dim,:] .= map(y -> from_y_to_x(y, dim), ymat[dim,:])
+	end
+	collect(eachcol(xmat))
+end
