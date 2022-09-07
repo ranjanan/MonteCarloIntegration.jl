@@ -237,8 +237,7 @@ function update_grid(x, delx, d)
 		end
 	end
 	newdelx = copy(delx)
-	newdelx[1,:] .= newx[2,:]
-	for i = 2:nbins
+	for i = 1:nbins
 		newdelx[i,:] .= newx[i+1,:] .- newx[i,:]
 	end
 	newx, newdelx
@@ -254,7 +253,7 @@ function sample_from_adaptive_grid(res, ncalls)
 	x = res.adaptive_grid
 	delx = res.grid_spacing
 
-	nbins = size(x, 1)
+	nbins = size(delx, 1)
 	ndim = size(x, 2)
 
 	# Sample `ncalls` points from this grid
@@ -270,5 +269,5 @@ function sample_from_adaptive_grid(res, ncalls)
 	for dim = 1:ndim
 		xmat[dim,:] .= map(y -> from_y_to_x(y, dim), ymat[dim,:])
 	end
-	collect(eachcol(xmat))
+	map(x -> tuple(x...), eachcol(xmat))
 end
