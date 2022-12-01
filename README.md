@@ -44,7 +44,7 @@ Defaults to 1e-2.
 Defaults to false.
 - batch: Whether `f` returns batches of function
 evaluations. `f` is assumed to take one argument 
-`pts`, an `ncalls × `ndims` matrix. Each row
+`pts`, an `ncalls × ndims` matrix. Each row
 is a unique point and returns an `ncalls` length
 vector of function evals. This argument defaults
 to false. 
