@@ -106,7 +106,7 @@ function vegas(func,
 
         # Sample `ncalls` points from this grid
 		# Uniform sampling in `y` space
-		ymat = QuasiMonteCarlo.sample(ncalls, zeros(ndim), ones(ndim), QuasiMonteCarlo.UniformSample())	
+		ymat = QuasiMonteCarlo.sample(ncalls, zeros(ndim), ones(ndim), Uniform())
 
 		from_y_to_i(y) = floor(Int,nbins*y) + 1
 		delta(y) = y*nbins + 1 - from_y_to_i(y)
@@ -258,7 +258,7 @@ function sample_from_adaptive_grid(res, ncalls)
 
 	# Sample `ncalls` points from this grid
 	# Uniform sampling in `y` space
-	ymat = QuasiMonteCarlo.sample(ncalls, zeros(ndim), ones(ndim), QuasiMonteCarlo.UniformSample())	
+	ymat = QuasiMonteCarlo.sample(ncalls, zeros(ndim), ones(ndim), Uniform())
 
 	from_y_to_i(y) = floor(Int,nbins*y) + 1
 	delta(y) = y*nbins + 1 - from_y_to_i(y)

@@ -1,7 +1,7 @@
 name = "MonteCarloIntegration"
 uuid = "4886b29c-78c9-11e9-0a6e-41e1f4161f7b"
 authors = ["Ranjan Anantharaman <ranjan.anantharaman@gmail.com>"]
-version = "0.1.2"
+version = "0.2.0"
 
 [deps]
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
@@ -10,7 +10,7 @@ Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 
 [compat]
 Distributions = "0.23, 0.24, 0.25"
-QuasiMonteCarlo = "0.2"
+QuasiMonteCarlo = "0.3"
 julia = "1.6"
 
 [extras]
