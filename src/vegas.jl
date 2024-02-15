@@ -92,7 +92,9 @@ function vegas(func,
 	for dim = 1:ndim
 		delx[:,dim] .= ((ub[dim] - lb[dim]) / nbins)
 	end
-	
+
+
+
     # Initialize all cumulative variables 
     # for integral and sd estimation 
     nevals = 0
@@ -102,26 +104,35 @@ function vegas(func,
     sigma_squares = Float64[]
     iter = 1
 
+	ymat = zeros(ndim, ncalls)
+	xmat = similar(ymat)
+
+	from_y_to_i(y) = floor(Int,nbins*y) + 1
+	delta(y) = y*nbins + 1 - from_y_to_i(y)
+	from_y_to_x(y,dim) = x[from_y_to_i(y),dim] + delx[from_y_to_i(y),dim]*delta(y)
+	J(y,dim) = nbins*delx[from_y_to_i(y),dim]
+
+	imat = map(from_y_to_i, ymat)
+	Js = zeros(eltype(ymat), size(ymat, 2))
+	Jsf = copy(Js)
     while iter <= maxiter
 
         # Sample `ncalls` points from this grid
 		# Uniform sampling in `y` space
-		ymat = QuasiMonteCarlo.sample(ncalls, zeros(ndim), ones(ndim), Uniform())
+		rand!(ymat) #QuasiMonteCarlo.sample(ncalls, zeros(ndim), ones(ndim), Uniform())
 
-		from_y_to_i(y) = floor(Int,nbins*y) + 1
-		delta(y) = y*nbins + 1 - from_y_to_i(y)
-		from_y_to_x(y,dim) = x[from_y_to_i(y),dim] + delx[from_y_to_i(y),dim]*delta(y)
-		J(y,dim) = nbins*delx[from_y_to_i(y),dim]
 
-		xmat = similar(ymat)
+
 		for dim = 1:ndim
-			xmat[dim,:] .= map(y -> from_y_to_x(y, dim), ymat[dim,:])
+			for j in 1:ncalls
+				xmat[dim,j] = from_y_to_x(ymat[dim,j], dim)
+			end
 		end
-		Js = zeros(eltype(ymat), size(ymat, 2))
 		for i = 1:size(ymat,2)
 			Js[i] = prod(J(ymat[dim, i],dim) for dim = 1:ndim)
 		end
-		imat = map(from_y_to_i, ymat)
+
+		imat .= from_y_to_i.(ymat)
 
         # Estimate integral. 
 		# Get all fevals in one shot
@@ -131,10 +142,10 @@ function vegas(func,
 		else
 			fevals = map(func, eachcol(xmat))
 		end
-		Jsf = Js .* fevals
+		Jsf .= Js .* fevals
 
 		integral_mc = sum(Jsf) / ncalls
-		variance_mc = (sum(Jsf.^2)/ncalls - integral_mc^2) / (ncalls - 1) + eps()
+		variance_mc = (sum(x-> x^2, Jsf)/ncalls - integral_mc^2) / (ncalls - 1) + eps()
 
         nevals += ncalls
         push!(integrals, integral_mc)
@@ -145,7 +156,9 @@ function vegas(func,
 		d = calculate_d(Jsf, imat, nbins, alpha)
 	
         # Update grid to make d equal in all intervals
-        x, delx = update_grid(x, delx, d)
+        xnew, delxnew = update_grid(x, delx, d)
+		x .= xnew
+		delx .= delxnew
 
         # Calculate integral and s.d upto this point
 		Itot = sum(integrals ./ sigma_squares) / sum(1 ./ sigma_squares)
