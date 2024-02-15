@@ -271,3 +271,4 @@ function sample_from_adaptive_grid(res, ncalls)
 	end
 	map(x -> tuple(x...), eachcol(xmat))
 end
+
