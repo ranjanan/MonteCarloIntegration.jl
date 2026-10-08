@@ -66,7 +66,7 @@ Computational Physics 27.2 (1978): 192-203.
 
 Most of the computation time in an integration
 algorithm is usually spent in function evaluations. 
-The batch inteface allows users to provide 
+The batch interface allows users to provide 
 batches of function evaluations, instead of supplying
 a function directly to be integrated. Users can now
 evaluate a number of points in parallel. 
