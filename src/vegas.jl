@@ -1,6 +1,6 @@
-using Random
-using Distributions
-using QuasiMonteCarlo
+using Random: rand!
+using Distributions: Uniform
+import QuasiMonteCarlo
 
 abstract type MonteCarloIntegrationResult end
 

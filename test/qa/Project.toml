@@ -1,0 +1,9 @@
+[deps]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+MonteCarloIntegration = "4886b29c-78c9-11e9-0a6e-41e1f4161f7b"
+SciMLTesting = "09d9d899-5365-40a9-917a-5f67fddea283"
+
+[compat]
+Aqua = "0.8"
+SciMLTesting = "2.4"
+julia = "1.10"
